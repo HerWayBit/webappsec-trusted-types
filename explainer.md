@@ -95,7 +95,7 @@ We identified three types that match the different contexts relevant for DOM XSS
 
 Introducing and requiring typed objects is, sadly, not sufficient: Exposing raw Trusted Types constructors to the web authors presents a significant problem, in that
 it only marginally improves the situation: while it allows certain libraries to produce and use typed
-values in place of strings, it also allows constructing the types at will (see https://github.com/w3c/webappsec-trusted-types/issues/31), and every
+values in place of strings, it also allows constructing the types at will (see https://github.com/w3c/trusted-types/issues/31), and every
 typed value construction in the application is a potential DOM XSS. Consider the following code
 snippet from the previous version of the API:
 
@@ -186,7 +186,7 @@ if a dependency is used twice in an application).
 One of the policies the application may create is special, in that it allows to use strings with the injection sinks. 
 These strings would be passed to a single user-defined policy that sanitizes the value or rejects it.
 The intention is to allow for a gradual migration of the code from strings towards Trusted Types.
-Please check the [specification draft](https://w3c.github.io/webappsec-trusted-types/dist/spec/#default-policy-hdr) for details.
+Please check the [specification draft](https://w3c.github.io/trusted-types/dist/spec/#default-policy-hdr) for details.
 
 
 ### javascript: URLs
@@ -212,6 +212,26 @@ trustedTypes.createPolicy('default', {
 
 This mechanism complements CSP's `'unsafe-inline'`, allowing the authors to enable strong security 
 controls in their application even if it occasionally uses `javascript:` URLs for legitimate purposes. 
+
+### Source Literals
+
+XSS is an unintended modification of a site's source code. Wrapping literals
+from the original JavaScript resource - which by definition aren't XSS - can be
+cumbersome. Trusted Types provides a way to easily wrap source literals in
+Trusted Types by using the tagged template syntax and the `fromLiteral` methods,
+in a way that cannot be spoofed at runtime:
+
+``` javascript
+const value = TrustedHTML.fromLiteral`<b>Hello there.</b>`;
+```
+
+Note that template literals are passed as arrays of strings to the tag functions.
+`fromLiteral` checks that a passed-in value is actually a template literal
+and not dynamically constructed.
+
+``` javascript
+TrustedHTML.fromLiteral(["<b>Hello there.</b>"]);  // Throws.
+```
 
 ### DOM Sinks
 
