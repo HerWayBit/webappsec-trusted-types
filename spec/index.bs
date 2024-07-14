@@ -4,8 +4,9 @@ Shortname: trusted-types
 Group: webappsec
 Level: none
 Status: ED
+TR: https://www.w3.org/TR/trusted-types/
 URL: https://w3c.github.io/trusted-types/dist/spec/
-Editor: Krzysztof Kotowicz, Google LLC https://google.com, koto@google.com
+Editor: Krzysztof Kotowicz, Google LLC https://google.com, koto@google.com, w3cid 110276
 Former Editor: Mike West, Google LLC https://google.com, mkwst@google.com
 Repository: w3c/trusted-types
 Abstract: An API that allows applications to lock down powerful APIs to only accept non-spoofable, typed values in place of strings to prevent vulnerabilities caused by using these APIs with attacker-controlled inputs.
@@ -40,6 +41,7 @@ default-policy-report-only.html
 default-policy.html
 Document-execCommand.html
 Document-write.html
+Document-write-exception-order.xhtml
 DOMParser-parseFromString-regression.html
 DOMParser-parseFromString.html
 DOMWindowTimers-setTimeout-setInterval.html
@@ -47,11 +49,14 @@ Element-insertAdjacentHTML.html
 Element-insertAdjacentText.html
 Element-outerHTML.html
 Element-setAttribute.html
+Element-setAttribute-respects-Elements-node-documents-globals-CSP.html
 Element-setAttributeNS.html
+Element-toggleAttribute.html
 empty-default-policy-report-only.html
 empty-default-policy.html
 eval-csp-no-tt.html
 eval-csp-tt-default-policy.html
+eval-csp-tt-default-policy-mutate.html
 eval-csp-tt-no-default-policy.html
 eval-function-constructor.html
 eval-no-csp-no-tt-default-policy.html
@@ -61,9 +66,11 @@ GlobalEventHandlers-onclick.html
 HTMLElement-generic.html
 HTMLScriptElement-in-xhtml-document.tentative.https.xhtml
 HTMLScriptElement-internal-slot.html
+idlharness.window.js
 no-require-trusted-types-for-report-only.html
 no-require-trusted-types-for.html
 Node-multiple-arguments.html
+modify-attributes-in-callback.html
 Range-createContextualFragment.html
 require-trusted-types-for-report-only.html
 require-trusted-types-for.html
@@ -82,6 +89,7 @@ trusted-types-reporting-check-report.html
 trusted-types-reporting.html
 trusted-types-source-file-path.html
 trusted-types-svg-script.html
+trusted-types-svg-script-set-href.html
 trusted-types-tojson.html
 TrustedType-AttributeNodes.html
 TrustedTypePolicy-createXXX.html
@@ -90,6 +98,8 @@ TrustedTypePolicy-CSP-wildcard.html
 TrustedTypePolicyFactory-constants.html
 TrustedTypePolicyFactory-createPolicy-createXYZTests.html
 TrustedTypePolicyFactory-createPolicy-cspTests-noNamesGiven.html
+TrustedTypePolicyFactory-createPolicy-cspTests-none-none-name.html
+TrustedTypePolicyFactory-createPolicy-cspTests-none-none.html
 TrustedTypePolicyFactory-createPolicy-cspTests-none-skip.html
 TrustedTypePolicyFactory-createPolicy-cspTests-none.html
 TrustedTypePolicyFactory-createPolicy-cspTests-wildcard.html
@@ -98,10 +108,10 @@ TrustedTypePolicyFactory-createPolicy-nameTests.html
 TrustedTypePolicyFactory-createPolicy-unenforced.html
 TrustedTypePolicyFactory-defaultPolicy.html
 TrustedTypePolicyFactory-getAttributeType-namespace.html
-TrustedTypePolicyFactory-getPropertyType.html
+TrustedTypePolicyFactory-getAttributeType-svg.html
 TrustedTypePolicyFactory-isXXX.html
-TrustedTypePolicyFactory-metadata.html
 tt-block-eval.html
+SVGScriptElement-internal-slot.html
 Window-TrustedTypes.html
 worker-constructor.https.html
 WorkerGlobalScope-eval.html
@@ -109,25 +119,26 @@ WorkerGlobalScope-importScripts.html
 </wpt>
 
 <pre class="anchors">
-spec: DOM-Parsing; urlPrefix: https://w3c.github.io/DOM-Parsing/
-    type: enum; text: SupportedType
-    type: abstract-op; text: fragment parsing algorithm; url: html-fragment-parsing-algorithm
-spec: DOM-Parsing; url: https://w3c.github.io/DOM-Parsing/#dom-innerhtml; type: interface; text: InnerHTML
 urlPrefix: https://html.spec.whatwg.org/multipage/common-dom-interfaces.html; type: dfn; spec: HTML
     text: reflect
-url: https://heycam.github.io/webidl/#this; type: dfn; spec: WebIDL
-    text: this
 spec:ECMA-262; urlPrefix: https://tc39.github.io/ecma262/
     type:abstract-op; text:ToString; url: sec-tostring
     type:abstract-op; text:Get; url: sec-get-o-p
     type:dfn; text:current realm record; url: current-realm
 spec: HTML; urlPrefix: https://html.spec.whatwg.org/
     type: dfn; text: prepare the script element; url: prepare-the-script-element
+    type: dfn; text: The text insertion mode; url: parsing-main-incdata
+    type: dfn; text: reentrant invocation of the parser; url: nestedParsing
+    type: dfn; text: get the text steps; url: get-the-text-steps
+    type: dfn; text: set the inner text steps; url: set-the-inner-text-steps
+    type: dfn; text: src; url: attr-script-src
+spec:DOM; urlPrefix: https://dom.spec.whatwg.org/
+    type: dfn; text: get text content; url: get-text-content
+    type: dfn; text: set text content; url: set-text-content
 </pre>
 
 <pre class="link-defaults">
 spec:fetch; type:dfn; for:/; text:request
-spec:DOM Parsing; type:idl; for:Element; text:innerHTML
 spec:html; type:dfn; for:global object; text:realm
 spec:csp3; type:dfn; text:csp list
 spec:csp3; type:dfn; for:global object; text:csp list
@@ -330,8 +341,9 @@ Since HTML parsers can create arbitrary elements, including scripts, and set arb
 DOM XSS <a>injection sinks</a> also include HTML parsing sinks:
 
   * Functions that parse & insert HTML strings into the document like
-    {{InnerHTML/innerHTML|Element.innerHTML}},
-    {{Element/outerHTML|Element.outerHTML}} setter, or {{Document/write|Document.write}}.
+    {{Element/innerHTML|Element.innerHTML}},
+    {{ShadowRoot/innerHTML|ShadowRoot.innerHTML}},
+    and {{Element/outerHTML|Element.outerHTML}} setters, or Document.write.
   * Functions that create a new same-origin {{Document}} with caller-controlled
     markup like {{DOMParser/parseFromString()}}.
 
@@ -384,14 +396,12 @@ interface TrustedHTML {
 };
 </pre>
 
-TrustedHTML objects have a `[[Data]]` internal slot which holds a
-DOMString. The slot's value is set when the object is created, and
-will never change during its lifetime.
+TrustedHTML objects have an associated string <dfn export for="TrustedHTML">data</dfn>.
+The value is set when the object is created, and will never change during its lifetime.
 
 <dfn method for="TrustedHTML">toJSON()</dfn> method steps and the
 <dfn for="TrustedHTML">stringification behavior</dfn> steps of a
-TrustedHTML object are to return the value from its
-`[[Data]]` internal slot.
+TrustedHTML object are to return the associated [=TrustedHTML/data=] value.
 
 ### <dfn interface>TrustedScript</dfn> ### {#trusted-script}
 
@@ -410,14 +420,12 @@ interface TrustedScript {
 };
 </pre>
 
-TrustedScript objects have a `[[Data]]` internal slot which holds a
-DOMString. The slot's value is set when the object is created, and
-will never change during its lifetime.
+TrustedScript objects have an associated string <dfn export for="TrustedScript">data</dfn>.
+The value is set when the object is created, and will never change during its lifetime.
 
 <dfn method for="TrustedScript">toJSON()</dfn> method steps and the
 <dfn for="TrustedScript">stringification behavior</dfn> steps of a
-TrustedScript object are to return the value from its
-`[[Data]]` internal slot.
+TrustedScript object are to return the associated [=TrustedScript/data=] value.
 
 ### <dfn interface>TrustedScriptURL</dfn> ### {#trused-script-url}
 
@@ -436,14 +444,12 @@ interface TrustedScriptURL {
 };
 </pre>
 
-TrustedScriptURL objects have a `[[Data]]` internal slot which holds a
-USVString. The slot's value is set when the object is created, and
-will never change during its lifetime.
+TrustedScriptURL objects have an associated string <dfn export for="TrustedScriptURL">data</dfn>.
+The value is set when the object is created, and will never change during its lifetime.
 
 <dfn method for="TrustedScriptURL">toJSON()</dfn> method steps and the
 <dfn for="TrustedScriptURL">stringification behavior</dfn> steps of a
-TrustedScriptURL object are to return the value from its
-`[[Data]]` internal slot.
+TrustedScriptURL object are to return the associated [=TrustedScriptURL/data=] value.
 
 ## <dfn>Policies</dfn> ## {#policies-hdr}
 
@@ -563,21 +569,21 @@ on the global object - see [[#extensions-to-the-windoworworkerglobalscope-interf
     DOMString? getAttributeType(
         DOMString tagName,
         DOMString attribute,
-        optional DOMString elementNs = "",
-        optional DOMString attrNs = "");
+        optional DOMString? elementNs = "",
+        optional DOMString? attrNs = "");
     DOMString? getPropertyType(
         DOMString tagName,
         DOMString property,
-        optional DOMString elementNs = "");
+        optional DOMString? elementNs = "");
     readonly attribute TrustedTypePolicy? defaultPolicy;
 };
 </pre>
 
-Internal slot `[[DefaultPolicy]]` may contain a {{TrustedTypePolicy}} object,
-and is initially empty.
+A {{TrustedTypePolicyFactory}} object has an associated {{TrustedTypePolicy}} <dfn for="TrustedTypePolicyFactory">default policy</dfn>.
+Its value is initially null.
 
-Internal slot `[[CreatedPolicyNames]]` is an <a>ordered set</a> of strings,
-initially empty.
+A {{TrustedTypePolicyFactory}} object has an associated <a>ordered set</a> of strings <dfn for="TrustedTypePolicyFactory">created policy names</dfn>.
+Its value is initially « ».
 
 <div dfn-type="method" dfn-for="TrustedTypePolicyFactory">
 
@@ -636,7 +642,7 @@ initially empty.
 
 
 : <dfn>isHTML(value)</dfn>
-:: Returns true if value is an instance of {{TrustedHTML}} and has its `[[Data]]`  internal slot set, false otherwise.
+:: Returns true if value is an instance of {{TrustedHTML}} and has an associated [=TrustedHTML/data=] value set, false otherwise.
 
     Note: `is*` functions are used to check if a given object is truly a legitimate
     [=Trusted Type=] object (i.e. it was created via one of the configured
@@ -658,10 +664,10 @@ initially empty.
 
 
 : <dfn>isScript(value)</dfn>
-:: Returns true if value is an instance of {{TrustedScript}} and has its `[[Data]]` internal slot set, false otherwise.
+:: Returns true if value is an instance of {{TrustedScript}} and has an associated [=TrustedScript/data=] value set, false otherwise.
 
 : <dfn>isScriptURL(value)</dfn>
-:: Returns true if value is an instance of {{TrustedScriptURL}} and has its `[[Data]]` internal slot set, false otherwise.
+:: Returns true if value is an instance of {{TrustedScriptURL}} and has an associated [=TrustedScriptURL/data=] value set, false otherwise.
 
 : <dfn>getPropertyType(tagName, property, elementNs)</dfn>
 :: Allows the authors to check if a Trusted Type is required for a given {{Element}}'s
@@ -672,14 +678,24 @@ initially empty.
     1. Set |localName| to |tagName| in [=ASCII lowercase=].
     1. If |elementNs| is an empty string, set |elementNs| to [=HTML namespace=].
     1. Let |interface| be the [=element interface=] for |localName| and |elementNs|.
-    1. If |interface| has an IDL <a spec="webidl">attribute</a> member which identifier is |attribute|, and
-        {{StringContext}} IDL extended attribute appears on that attribute, return
-        stringified {{StringContext}}'s identifier and abort further steps.
+    1. Let |expectedType| be null.
+    1. Find the row in the following table, where the first column is "*" or |interface|'s name, and |property| is in the second column.
+        If a matching row is found, set |expectedType| to the value of the third column.
 
-        Note: This also takes into account all members of [=interface mixins=] that
-        |interface| [=includes=].
-
-    1. Return null.
+        <table>
+          <thead>
+            <tr><th>Element<th>Property name<th>TrustedType
+          <tbody>
+            <tr><td>{{HTMLIFrameElement}}<td>"srcdoc"<td>{{TrustedHTML}}
+            <tr><td>{{HTMLScriptElement}}<td>"innerText"<td>{{TrustedScript}}
+            <tr><td>{{HTMLScriptElement}}<td>"src"<td>{{TrustedScriptURL}}
+            <tr><td>{{HTMLScriptElement}}<td>"text"<td>{{TrustedScript}}
+            <tr><td>{{HTMLScriptElement}}<td>"textContent"<td>{{TrustedScript}}
+            <tr><td>"*"<td>"innerHTML"<td>{{TrustedHTML}}
+            <tr><td>"*"<td>"outerHTML"<td>{{TrustedHTML}}
+          </tbody>
+        </table>
+    1. Return |expectedType|.
 
     <div class="example" id="get-property-type-example">
     <xmp highlight="js">
@@ -701,12 +717,13 @@ initially empty.
     1. If |elementNs| is an empty string, set |elementNs| to [=HTML namespace=].
     1. If |attrNs| is an empty string, set |attrNs| to null.
     1. Let |interface| be the [=element interface=] for |localName| and |elementNs|.
-    1. If |interface| does not have an IDL <a spec="webidl">attribute</a> that [=reflects=] a content attribute with
-        |localName| local name and |attrNs| namespace,
-        return undefined and abort further steps. Otherwise, let |idlAttribute| be that IDL <a spec="webidl">attribute</a>.
-    1. If {{StringContext}} IDL extended attribute appears on |idlAttribute|, return
-        stringified {{StringContext}}'s identifier and abort further steps.
-    1. Return null.
+    1. Let |expectedType| be null.
+    1. Set |attributeData| to the result of [$Get Trusted Type data for attribute$] algorithm, with the following arguments:
+        * |interface| as |element|
+        * |attribute|
+        * |attrNs|
+    1. If |attributeData| is not null, then set |expectedType| to the value of the third member of |attributeData|.
+    1. Return |expectedType|.
 
     <div class="example" id="get-attribute-type-example">
     <xmp highlight="js">
@@ -720,7 +737,7 @@ initially empty.
 <div dfn-type="attribute" dfn-for="TrustedTypePolicyFactory">
 
 : <dfn>emptyHTML</dfn>
-:: is a {{TrustedHTML}} object with its `[[Data]]` internal slot value set to an empty string.
+:: is a {{TrustedHTML}} object with its [=TrustedHTML/data=] value set to an empty string.
 
 <div class="example" id="empty-html-example">
 <xmp highlight="js">
@@ -729,7 +746,7 @@ anElement.innerHTML = trustedTypes.emptyHTML; // no need to create a policy
 </div>
 
 : <dfn>emptyScript</dfn>
-:: is a {{TrustedScript}} object with its `[[Data]]` internal slot value set to an empty string.
+:: is a {{TrustedScript}} object with its [=TrustedScript/data=] value set to an empty string.
 
 Note: This object can be used to detect if the runtime environment has [[#csp-eval]]. While native Trusted Types implementation can
 support `eval(TrustedScript)`, it is impossible for a polyfill to  emulate that, as
@@ -746,7 +763,7 @@ eval(supportsTS ? myTrustedScriptObj : myTrustedScriptObj.toString());
 </div>
 
 : <dfn>defaultPolicy</dfn>
-:: Returns the value of `[[DefaultPolicy]]` internal slot, or null if the slot is empty.
+:: Returns the value of [=TrustedTypePolicyFactory/default policy=].
 
 <div class="example" id="defaultpolicy-example">
 <xmp highlight="js">
@@ -777,7 +794,7 @@ interface TrustedTypePolicy {
 
 Each policy has a <dfn dfn-for="TrustedTypePolicy">name</dfn>.
 
-Each TrustedTypePolicy object has an `[[options]]` internal slot, holding the {{TrustedTypePolicyOptions}} object describing the actual behavior of the policy.
+Each TrustedTypePolicy object has an associated {{TrustedTypePolicyOptions}} <dfn for="TrustedTypePolicy">options</dfn> object, describing the actual behavior of the policy.
 
 <div dfn-type="method" dfn-for="TrustedTypePolicy">
 
@@ -847,7 +864,7 @@ callback CreateScriptCallback = DOMString? (DOMString input, any... arguments);
 callback CreateScriptURLCallback = USVString? (DOMString input, any... arguments);
 </pre>
 
-### <dfn>Default policy</dfn> ### {#default-policy-hdr}
+### <dfn data-lt="default-policy-explanation">Default policy</dfn> ### {#default-policy-hdr}
 
 *This section is not normative.*
 
@@ -941,25 +958,25 @@ a string (|policyName|), {{TrustedTypePolicyOptions}} dictionary (|options|), an
 
 1.  Let |allowedByCSP| be the result of executing [$Should Trusted Type policy
     creation be blocked by Content Security Policy?$] algorithm with |global|,
-    |policyName| and |factory|'s `[[CreatedPolicyNames]]` slot value.
+    |policyName| and |factory|'s [=created policy names=] value.
 1.  If |allowedByCSP| is `"Blocked"`, throw a TypeError and abort further steps.
-1.  If |policyName| is `default` and the |factory|'s `[[DefaultPolicy]]` slot
-    value is not empty, throw a TypeError and abort further steps.
+1.  If |policyName| is `default` and the |factory|'s [=TrustedTypePolicyFactory/default policy=]
+    value is not null, throw a TypeError and abort further steps.
 1.  Let |policy| be a new {{TrustedTypePolicy}} object.
 1.  Set |policy|'s `name` property value to |policyName|.
 1.  Let |policyOptions| be a new {{TrustedTypePolicyOptions}} object.
 1.  Set |policyOptions|
-    {{TrustedTypePolicy/createHTML()|createHTML}} property to |option|'s
+    {{TrustedTypePolicy/createHTML()|createHTML}} property to |options|'
     {{TrustedTypePolicyOptions/createHTML|createHTML}} property value.
 1.  Set |policyOptions| {{TrustedTypePolicy/createScript()|createScript}}
-    property to |option|'s
+    property to |options|'
     {{TrustedTypePolicyOptions/createScript|createScript}} property value.
 1.  Set |policyOptions| {{TrustedTypePolicy/createScriptURL()|createScriptURL}}
-    property to |option|'s
+    property to |options|'
     {{TrustedTypePolicyOptions/createScriptURL|createScriptURL}} property value.
-1.  Set |policy|'s `[[options]]` internal slot value to *policyOptions*.
-1.  If the |policyName| is `default`, set the |factory|'s `[[DefaultPolicy]]` slot value to |policy|.
-1.  Append |policyName| to |factory|'s `[[CreatedPolicyNames]]`.
+1.  Set |policy|'s [=TrustedTypePolicy/options=] value to *policyOptions*.
+1.  If the |policyName| is `default`, set the |factory|'s [=TrustedTypePolicyFactory/default policy=] value to |policy|.
+1.  [=set/append|Append=] |policyName| to |factory|'s [=created policy names=].
 1.  Return |policy|.
 
 ## <dfn abstract-op>Create a Trusted Type</dfn> ## {#create-a-trusted-type-algorithm}
@@ -970,13 +987,9 @@ a string |value| and a list |arguments|, execute the following steps:
 1.  Let |policyValue| be the result of executing [$Get Trusted Type policy value$] with the same arguments as this algorithm and additionally true as |throwIfMissing|.
 1.  If the algorithm threw an error, rethrow the error and abort the following steps.
 1.  Let |dataString| be the result of stringifying |policyValue|.
-1.  Let |trustedObject| be a new instance of an interface with a type
-    name |trustedTypeName|, with its `[[Data]]` internal slot value
-    set to |dataString|.
-1.  If |trustedObject| is a {{TrustedScript}}, set its `[[HostDefinedCodeLike]]` internal slot value to the value in its `[[Data]]` slot.
-
-    Note: This adds an integration point with [dynamic-code-brand-checks proposal](https://tc39.es/proposal-dynamic-code-brand-checks/).
-1.  Return |trustedObject|.
+1.  If |policyValue| is null or undefined, set |dataString| to the empty string.
+1.  Return a new instance of an interface with a type
+    name |trustedTypeName|, with its associated data value set to |dataString|.
 
 ## <dfn abstract-op>Get Trusted Type policy value</dfn> ## {#get-trusted-type-policy-value-algorithm}
 
@@ -1005,8 +1018,7 @@ a string |value|, a list |arguments|, and a boolean |throwIfMissing|, execute th
       </tr>
     </table>
 
-1.  Let |options| be the value of |policy|'s `[[options]]` slot.
-1.  Let |function| be the value of the property in |options| named |functionName|.
+1.  Let |function| be the value of the property in |policy|'s [=options=] named |functionName|.
 1.  If |function| is `null`, then:
     1. If |throwIfMissing| throw a TypeError.
     1. Else return `null`.
@@ -1026,11 +1038,9 @@ Given a {{TrustedType}} type (|expectedType|), a [=realm/global object=] (|globa
 
 1.  If |input| has type |expectedType|, return stringified
     |input| and abort these steps.
-1.  Let |cspList| be the |global|'s <a>CSP list</a>.
-1.  If |cspList| is `null` or does not contain a [=content security policy object|policy=]
-    which [=directive set=] containing a [=directive=] with a name `"require-trusted-types-for"`,
-    or that directive does not contain a <a>trusted-types-sink-group</a> which is a match for a value |sinkGroup|,
-    return stringified |input| and abort these steps.
+1.  Let |requireTrustedTypes| be the result of executing [$Does sink type require trusted types?$] algorithm,
+    passing |global|, and |sinkGroup|.
+1.  If |requireTrustedTypes| is `false`, return stringified |input| and abort these steps.
 1.  Let |convertedInput| be the result of executing [$Process value with a default policy$] with the same arguments as this algorithm.
 1.  If the algorithm threw an error, rethrow the error and abort the following steps.
 1.  If |convertedInput| is `null` or `undefined`, execute the following steps:
@@ -1050,7 +1060,7 @@ This algorithm routes a value to be assigned to an [=injection sink=]  through a
 Given a {{TrustedType}} type (|expectedType|), a [=realm/global object=] (|global|),
 {{TrustedType}} or a string (|input|), and a string (|sink|), run these steps:
 
-1.  Let |defaultPolicy| be the value of |global|'s [=Window/trusted type policy factory=]'s `[[DefaultPolicy]]` slot. If the slot is empty, return `null`.
+1.  Let |defaultPolicy| be the value of |global|'s [=Window/trusted type policy factory=]'s [=TrustedTypePolicyFactory/default policy=].
 1.  Let |policyValue| be the result of executing [$Get Trusted Type policy value$], with the following arguments:
      *  |defaultPolicy| as |policy|
      *  stringified |input| as |value|
@@ -1060,20 +1070,15 @@ Given a {{TrustedType}} type (|expectedType|), a [=realm/global object=] (|globa
 1.  If the algorithm threw an error, rethrow the error and abort the following steps.
 1.  If |policyValue| is null or undefined, return |policyValue|.
 1.  Let |dataString| be the result of stringifying |policyValue|.
-1.  Let |trustedObject| be a new instance of an interface with a type
-    name |trustedTypeName|, with its `[[Data]]` internal slot value
-    set to |dataString|.
-1.  If |trustedObject| is a {{TrustedScript}}, set its `[[HostDefinedCodeLike]]` internal slot value to the value in its `[[Data]]` slot.
-
-    Note: This adds an integration point with [dynamic-code-brand-checks proposal](https://tc39.es/proposal-dynamic-code-brand-checks/).
-1.  Return |trustedObject|.
+1.  Return a new instance of an interface with a type
+    name |trustedTypeName|, with its associated data value set to |dataString|.
 
 ## <dfn abstract-op>Prepare the script text</dfn> ## {#prepare-script-text}
 
 Given an {{HTMLScriptElement}} (|script|), this algorithm performs the following steps:
 
-1.  If |script|'s {{HTMLScriptElement/[[ScriptText]]}} internal slot value is not equal to its [=child text content=],
-    set |script|'s {{HTMLScriptElement/[[ScriptText]]}} to the result of executing [$Get Trusted Type compliant string$], with the following arguments:
+1.  If |script|'s [=script text=] value is not equal to its [=child text content=],
+    set |script|'s [=script text=] to the result of executing [$Get Trusted Type compliant string$], with the following arguments:
       * {{TrustedScriptURL}} as |expectedType|,
       * |script|'s {{Document}}'s [=relevant global object=] as |global|,
       * |script|'s [=child text content=] attribute value,
@@ -1085,29 +1090,16 @@ Given an {{HTMLScriptElement}} (|script|), this algorithm performs the following
 ## Get Trusted Types-compliant attribute value ## {#validate-attribute-mutation}
 To <dfn abstract-op export>get Trusted Types-compliant attribute value</dfn> on {{Attr}} |attribute| with {{Element}} |element| and {{TrustedType}} or a string |newValue|, perform the following steps:
 
-1. Let |expectedType| be null.
-1. Let |sink| be null.
-1. Find the row in the following table, where |element| is in the first column, and |attribute|'s <a for="Attr">namespace</a> and <a for="Attr">local name</a> match the values in the second and third column, respectively.
-    If a matching row is found, set |expectedType| and |sink| to the value of the fourth, and fifth column in that row, respectively.
-
-    <table>
-      <thead>
-        <tr><th>Element<th>Attribute namespace<th>Attribute local name<th>TrustedType<th>Sink
-      <tbody>
-        <tr><td>{{HTMLIFrameElement}}<td>null<td>"srcdoc"<td>{{TrustedHTML}}<td>"HTMLIFrameElement srcdoc"
-        <tr><td>{{HTMLEmbedElement}}<td>null<td>"src"<td>{{TrustedScriptURL}}<td>"HTMLEmbedElement src"
-        <tr><td>{{HTMLScriptElement}}<td>null<td>"src"<td>{{TrustedScriptURL}}<td>"HTMLScriptElement src"
-        <tr><td>{{HTMLObjectElement}}<td>null<td>"data"<td>{{TrustedScriptURL}}<td>"HTMLObjectElement data"
-        <tr><td>{{HTMLObjectElement}}<td>null<td>"codebase"<td>{{TrustedScriptURL}}<td>"HTMLObjectElement codebase"
-        <tr><td>{{SVGScriptElement}}<td>null<td>"href"<td>{{TrustedScriptURL}}<td>"SVGScriptElement href"
-        <tr><td>{{SVGScriptElement}}<td><a>XLink namespace</a><td>"href"<td>{{TrustedScriptURL}}<td>"SVGScriptElement href"
-      </tbody>
-    </table>
-
-1. If |expectedType| is null, then:
+1. Set |attributeData| to the result of [$Get Trusted Type data for attribute$] algorithm, with the following arguments:
+    * |element|
+    * |attribute|'s <a for="Attr">local name</a> as |attribute|
+    * |attribute|'s <a for="Attr">namespace</a> as |attributeNs|
+1. If |attributeData| is null, then:
     1. If |newValue| is a string, return |newValue|.
     1. <a>Assert</a>: |newValue| is {{TrustedHTML}} or {{TrustedScript}} or {{TrustedScriptURL}}.
-    1. Return |value|'s `[[Data]]` internal slot value.
+    1. Return |value|'s associated data.
+1. Let |expectedType| be the value of the third member of |attributeData|.
+1. Let |sink| be the value of the fourth member of |attributeData|.
 1. Return the result of executing [$Get Trusted Type compliant string$] with the following arguments:
      * |expectedType|
      * |newValue| as |input|
@@ -1117,104 +1109,36 @@ To <dfn abstract-op export>get Trusted Types-compliant attribute value</dfn> on 
 
    If the algorithm threw an error, rethrow the error.
 
+## Get Trusted Type data for attribute ## {#get-trusted-type-data-for-attribute}
+To <dfn abstract-op>Get Trusted Type data for attribute</dfn> given |element|, |attribute|, |attributeNs|, perform the following steps:
+
+Issue: The [=event handler content attribute=] concept used below is ambiguous. This spec needs a better mechanism to identify event handler attributes. See [https://github.com/w3c/trusted-types/issues/520](https://github.com/w3c/trusted-types/issues/520).
+
+1. Let |data| be null.
+1. If |attributeNs| is null, and |attribute| is the name of an [=event handler content attribute=], then:
+    1. Return ({{Element}}, null, |attribute|, {{TrustedScript}}, "Element " + |attribute|).
+1. Find the row in the following table, where |element| is in the first column, |attributeNs| is in the second column,
+    and |attribute| is in the third column.
+    If a matching row is found, set |data| to that row.
+
+    <table>
+      <thead>
+        <tr><th>Element<th>Attribute namespace<th>Attribute local name<th>TrustedType<th>Sink
+      <tbody>
+        <tr><td>{{HTMLIFrameElement}}<td>null<td>"srcdoc"<td>{{TrustedHTML}}<td>"HTMLIFrameElement srcdoc"
+        <tr><td>{{HTMLScriptElement}}<td>null<td>"src"<td>{{TrustedScriptURL}}<td>"HTMLScriptElement src"
+        <tr><td>{{SVGScriptElement}}<td>null<td>"href"<td>{{TrustedScriptURL}}<td>"SVGScriptElement href"
+        <tr><td>{{SVGScriptElement}}<td><a>XLink namespace</a><td>"href"<td>{{TrustedScriptURL}}<td>"SVGScriptElement href"
+      </tbody>
+    </table>
+
+1. Return |data|.
+
 # Integrations # {#integrations}
 
 <pre class="idl">
-typedef [StringContext=TrustedHTML] DOMString HTMLString;
-typedef [StringContext=TrustedScript] DOMString ScriptString;
-typedef [StringContext=TrustedScriptURL] USVString ScriptURLString;
 typedef (TrustedHTML or TrustedScript or TrustedScriptURL) TrustedType;
 </pre>
-
-## Integration with WebIDL ## {#webidl-integration}
-
-Issue: Keep in sync with https://github.com/heycam/webidl/pull/841.
-
-<h3 id="StringContext" extended-attribute lt="StringContext">[StringContext]</h3>
-
-This specification defines a new [{{StringContext}}] [=extended attribute=].
-
-If the [{{StringContext}}] [=extended attribute=] appears on {{DOMString}} or {{USVString}}, it
-modifies how the value is converted to the IDL type, causing additional value validation to
-adhere to the context the string is used in.
-
-The [{{StringContext}}] extended attribute must [=takes an identifier|take an identifier=]. The [=identifier=]
-must be one of {{TrustedHTML}}, {{TrustedScript}} and {{TrustedScriptURL}}.
-
-Issue: Make sure this is OK, otherwise use strings and convert them to TrustedXYZ in this spec only.
-
-[{{StringContext}}] extended attribute may only annotate a type of a [=regular attribute=] or
-a [=regular operation=] argument. A type annotated with the [{{StringContext}}]
-extended attribute must not appear in a [=read only=] attribute. The [=regular attribute=] or
-a [=regular operation=] argument that the type annotated with the [{{StringContext}}] extended
-attribute appears in is its <dfn>related construct</dfn>.
-
-A type that is not {{DOMString}} or {{USVString}} must not be associated with the [{{StringContext}}] extended attribute.
-
-See the rules for converting ECMAScript values to the IDL types in [[webidl#js-DOMString]]
-for the specific requirements that the use of [{{StringContext}}] entails.
-
-<div class="example" id="webidl-stringcontext-example">
-
-    In the following [=IDL fragment=],
-    a [=variadic=] [=operation=] is declared
-    that uses the [{{StringContext}}] [=extended attribute=]
-    on all its arguments:
-
-    <pre highlight="webidl">
-        interface Document {
-          undefined write([StringContext=TrustedHTML] DOMString... text);
-        };
-    </pre>
-</div>
-
-### Extended attributes applicable to types ### {#webidl-applicable-to-types}
-
-The following extended attributes are <dfn for="extended attributes" noexport>applicable to types</dfn>:
- [{{AllowShared}}],
- [{{Clamp}}],
- [{{EnforceRange}}]<ins>,
- [{{StringContext}}]</ins> and
- [{{LegacyNullToEmptyString}}].
-
-### Type conversion ### {#webidl-type-conversion}
-
-This specification modifies the algorithm implementing the conversion to DOMString in [[webidl#js-DOMString]]:
-
-An ECMAScript value |V| is [=converted to an IDL value|converted=]
-to an IDL {{DOMString}} value by running the following algorithm:
-
-  1.  <ins>If the conversion is to an IDL type associated with the
-      [{{StringContext}}] extended attribute, then set |V| to the result of [=validate the string in context=], passing
-      [=this=], |V|, the {{StringContext}} extended attribute [=identifier=], and the [=identifier=]
-      of the [{{StringContext}}] extended attribute [=related construct=].
-
-      Note: That algorithm may throw a TypeError.
-      </ins>
-  1.  If |V| is <emu-val>null</emu-val> and the conversion is to an IDL type
-      associated with the [{{LegacyNullToEmptyString}}] extended
-      attribute, then return the {{DOMString}} value that represents the empty string.
-  1.  Let |x| be <a abstract-op>ToString</a>(|V|).
-  1.  Return the IDL {{DOMString}} value that represents the same sequence of code units as the one the ECMAScript String value |x| represents.
-
-### Validate the string in context ### {#webidl-validate-the-string-in-context}
-
-This specification adds a following section to [[webidl#js-security]].
-
-Certain algorithms in [[webidl#js-type-mapping]] are defined to
-<dfn id="dfn-validate-the-string-in-context" export>validate the string in context</dfn> on a given
-value. This check is used to determine whether a given value
-is appropriate for its {{StringContext}}. This validation takes the following four inputs:
-
-1.  the [=platform object=] on
-    which the operation invocation or attribute access is being done,
-1.  the value to validate,
-1.  the {{StringContext}} [=identifier=], and
-1.  the [=identifier=] of the operation or attribute.
-
-The algorithm returns an ECMAScript String value, or throws a TypeError.
-
-Note: The HTML Standard defines how the validation is performed. [[!HTML]]
 
 ## Integration with HTML ## {#integration-with-html}
 
@@ -1234,49 +1158,104 @@ partial interface mixin WindowOrWorkerGlobalScope {
 The {{WindowOrWorkerGlobalScope/trustedTypes}} getter steps are to return [=this=]'s [=relevant global object=]'s [[#integration-with-html|trusted
 type policy factory]].
 
-### Extensions to the Document interface ### {#extensions-to-the-document-interface}
+### Enforcement for scripts ### {#enforcement-in-scripts}
 
-This document modifies the {{Document}} interface defined by [[HTML5|HTML]]:
+This document modifies how {{HTMLScriptElement}} [=child text content=] can be set to allow applications to control dynamically created scripts. It does so by
+adding the {{HTMLElement/innerText}} and {{Node/textContent}} attributes directly on {{HTMLScriptElement}}. The behavior of the attributes remains the same
+as in their original counterparts, apart from the additional behavior of calling [$Get Trusted Type compliant string$].
+
+Note: Using these IDL attributes is the recommended way of dynamically setting the URL or a text of a script. Manipulating attribute nodes or text nodes directly will call a default policy on the final value when the script is prepared.
 
 <pre class="idl exclude">
-partial interface Document {
-  [CEReactions] undefined write(HTMLString... text);
-  [CEReactions] undefined writeln(HTMLString... text);
+partial interface HTMLScriptElement {
+ [CEReactions] attribute ([LegacyNullToEmptyString] DOMString or TrustedScript) innerText;
+ [CEReactions] attribute (DOMString or TrustedScript)? textContent;
+ [CEReactions] attribute (USVString or TrustedScriptURL) src;
+ [CEReactions] attribute (DOMString or TrustedScript) text;
 };
 </pre>
-
-### Enforcement for scripts ### {#enforcement-in-scripts}
 
 #### Slots with trusted values #### {#slots-with-trusted-values}
 
 This document modifies {{HTMLScriptElement}}s. Each script has:
 
-: <dfn for="HTMLScriptElement" lt="[[ScriptText]]" attribute>`[[ScriptText]]`</dfn> internal slot.
+: an associated string <dfn export for="HTMLScriptElement">script text</dfn>.
 ::  A string, containing the body of the script to execute that was set
-    through a {{StringContext}} compliant sink. Equivalent to script's
-    [=child text content=]. Initially null.
+    through a compliant sink. Equivalent to script's
+    [=child text content=]. Initially an empty string.
 
-#### Setting slot values #### {#setting-slot-values}
+#### The {{HTMLScriptElement/innerText}} IDL attribute #### {#the-innerText-idl-attribute}
 
-This document modifies how {{HTMLScriptElement}} [=child text content=] can be set to allow applications to control dynamically created scripts. It does so by
-adding the {{HTMLElement/innerText}} and {{Node/textContent}} attributes directly on {{HTMLScriptElement}}. The behavior of the attributes remains the same
-as in their original counterparts, apart from additional behavior triggered by the {{StringContext}} extended attribute presence.
+The {{HTMLScriptElement/innerText}} setter steps are:
 
-Note: Using these IDL attributes is the recommended way of dynamically setting URL or a text of a script. Manipulating attribute nodes or text nodes directly will call a default policy on the final value when the script is prepared.
+1.  Let |value| be the result of calling [$Get Trusted Type compliant string$] with
+    {{TrustedScript}}, [=this=]'s [=relevant global object=], the given value, `HTMLScriptElement innerText`, and
+    `script`.
+1.  Set [=this=]'s [=script text=] value to |value|.
+1.  Run [=set the inner text steps=] with [=this=] and |value|.
 
-<pre class="idl exclude">
-partial interface HTMLScriptElement {
- [CEReactions] attribute [LegacyNullToEmptyString] ScriptString innerText;
- [CEReactions] attribute ScriptString? textContent;
- [CEReactions] attribute ScriptURLString src;
- [CEReactions] attribute ScriptString text;
-};
-</pre>
+The {{HTMLScriptElement/innerText}} getter steps are:
 
-On setting the {{HTMLElement/innerText}}, {{Node/textContent}} and {{HTMLScriptElement/text}} IDL attributes execute the following algorithm:
+1.  Return the result of running [=get the text steps=] with [=this=].
 
-1. Set {{HTMLScriptElement/[[ScriptText]]}} internal slot value to the stringified attribute value.
-1. Perform the usual attribute setter steps.
+#### The {{HTMLScriptElement/textContent}} IDL attribute #### {#the-textContent-idl-attribute}
+
+The {{HTMLScriptElement/textContent}} setter steps are to, if the given value is null, act as if it was the
+empty string instead, and then do as described below:
+
+1.  Let |value| be the result of calling [$Get Trusted Type compliant string$] with
+    {{TrustedScript}}, [=this=]'s [=relevant global object=], the given value, `HTMLScriptElement textContent`, and
+    `script`.
+1.  Set [=this=]'s [=script text=] value to |value|.
+1.  Run [=set text content=] with [=this=] and |value|.
+
+The {{HTMLScriptElement/textContent}} getter steps are:
+
+1.  Return the result of running [=get text content=] with [=this=].
+
+#### The {{HTMLScriptElement/text}} IDL attribute #### {#the-text-idl-attribute}
+
+Update the {{HTMLScriptElement/text}} setter steps algorithm as follows.
+
+1.  <ins>Let |value| be the result of calling [$Get Trusted Type compliant string$] with
+    {{TrustedScript}}, [=this=]'s [=relevant global object=], the given value, `HTMLScriptElement text`, and
+    `script`.</ins>
+1.  <ins>Set [=this=]'s [=script text=] value to the given value.</ins>
+1.  [=String replace all=] with the given value within [=this=].
+
+
+#### The {{HTMLScriptElement/src}} IDL attribute #### {#the-src-idl-attribute}
+
+The {{HTMLScriptElement/src}} setter steps are:
+
+1.  <ins>Let |value| be the result of calling [$Get Trusted Type compliant string$] with
+    {{TrustedScriptURL}}, [=this=]'s [=relevant global object=], the given value, `HTMLScriptElement src`, and
+    `script`.</ins>
+1.  <ins>Set [=this=]'s [=src=] content attribute to |value|.</ins>
+
+#### Setting slot values from parser #### {#setting-slot-values-from-parser}
+
+This document modifies the HTML parser to set the [=script text=] value when the script is created.
+
+Modify the [=The text insertion mode=] algorithm as follows:
+
+<dl class="switch">
+    <dt id="scriptEndTag">An end tag whose tag name is "script"</dt>
+    <dd>
+        <p>...</p>
+
+        <ins><p>Set <var>script</var>'s [=script text=] value to its [=child text content=].</p></ins>
+
+        <p>If the <span>active speculative HTML parser</span> is null, then <span>prepare the script
+        element</span> <var>script</var>. This might cause some script to execute, which might cause
+        <span data-x="dom-document-write">new characters to be inserted into the tokenizer</span>, and
+        might cause the tokenizer to output more tokens, resulting in a [=reentrant invocation of the parser=].</p>
+
+        <p>...</p>
+    </dd>
+</dl>
+
+Issue: The above algorithm doesn't account for the case when the script element's content is changed mid-parse. Implementors should ensure they protect against this case. See [https://github.com/w3c/trusted-types/issues/507](https://github.com/w3c/trusted-types/issues/507).
 
 #### Slot value verification #### {#slot-value-verification}
 
@@ -1298,230 +1277,13 @@ The first few steps of the [=prepare the script element=] algorithm are modified
     run when the parser tries to run it, but it is later executed after a script dynamically
     updates it, it will execute in an async fashion even if the <code id=script-processing-model:attr-script-async-5><a href=https://html.spec.whatwg.org/#attr-script-async>async</a></code> attribute isn't set.</p>
   <li><ins><p>Execute the [$Prepare the script text$] algorithm on <var>el</var>. If that algorithm threw an error, then return.</p></ins></li>
-  <li><p>Let <var>source text</var> be <var>el</var>'s <del><a id=script-processing-model:child-text-content href=https://dom.spec.whatwg.org/#concept-child-text-content data-x-internal=child-text-content>child text content</a>.</del> <ins>`[[ScriptText]]` internal slot value.</ins>
+  <li><p>Let <var ignore="">source text</var> be <var>el</var>'s <del><a id=script-processing-model:child-text-content href=https://dom.spec.whatwg.org/#concept-child-text-content data-x-internal=child-text-content>child text content</a>.</del> <ins>[=script text=] value.</ins>
   <li>...
   </ol>
 
-### Enforcement in element attributes ### {#enforcement-in-sinks}
+## Integration with DOM ## {#integration-with-dom}
 
-This document modifies following IDL attributes of various DOM elements:
-
-<pre class="idl exclude">
-partial interface HTMLIFrameElement {
-  [CEReactions] attribute HTMLString srcdoc;
-};
-
-partial interface HTMLEmbedElement {
-  [CEReactions] attribute ScriptURLString src;
-};
-
-partial interface HTMLObjectElement {
-  [CEReactions] attribute ScriptURLString data;
-  [CEReactions] attribute ScriptURLString codeBase; // obsolete
-};
-</pre>
-
-### Enforcement in timer functions ### {#enforcement-in-timer-functions}
-
-This document modifies the {{WindowOrWorkerGlobalScope}} interface mixin:
-
-<pre class="idl exclude">
-typedef (ScriptString or Function) TrustedTimerHandler;
-
-partial interface mixin WindowOrWorkerGlobalScope {
-  long setTimeout(TrustedTimerHandler handler, optional long timeout = 0, any... arguments);
-  long setInterval(TrustedTimerHandler handler, optional long timeout = 0, any... arguments);
-};
-</pre>
-
-To the [[HTML5#timer-initialisation-steps|timer initialization steps algorithm]],
-add this step between 7.1 and 7.2:
-
-1.  If the first operation argument is not a {{Function}}, or if the first operation argument is a {{TrustedType}}, set the first operation argument to the result of executing
-    the [$Get Trusted Type compliant string$] algorithm, with
-    *   |global| set to the [=this=] value's [=relevant global object=].
-    *   |input| set to the first method argument, and
-    *   |expectedType| set to {{TrustedScript}}.
-    *   |sink| set to `Window setInterval` if <var ignore>repeat</var> is true, `Window setTimeout` otherwise.
-    *   |sinkGroup| set to `'script'`.
-
-        Note: This matches the logic that the extended attribute would apply.
-
-Note: This makes sure that a {{TrustedScript}} is passed to timer
-functions in place of a string when Trusted Types are enforced, but
-also unconditionally accepts any {{Function}} object.
-
-### Enforcement in event handler content attributes ### {#enforcement-in-event-handler-content-attributes}
-
-This document modifies the
-[=attribute change steps=] for an [[HTML5#event-handler-content-attributes|event handler content attribute]].
-
-At the beginning of step 5, insert the following steps:
-
-1.  Let |value| be the result of executing the
-    [$Get Trusted Type compliant string$] algorithm, with the following arguments:
-    *   |value| as |input|,
-    *   {{TrustedScript}} as |expectedType|,
-    *   `'script'` as |sinkGroup|
-    *   |sink| being the result of [=concatenating=] the list &laquo; <var ignore>element</var>'s [=Element/local name=], |localName| &raquo; with `"."` as a |separator|.
-
-        Note: For example, `document.createElement('div').onclick = value` will result in |sink| being `'div.onclick'`.
-
-    *   <var ignore>eventTarget</var>'s [=relevant global object=] as |global|,
-
-1.  If the algorithm throws an error, abort these steps.
-
-Note: This also applies to events in [[SVG2#EventAttributes]].
-
-<div class="example" id="event-handlers-example">
-  <pre highlight=js>
-  // Content-Security-Policy: require-trusted-types-for 'script'
-
-  const img = document.createElement('img');
-  img.setAttribute('onerror', 'alert(1)'); // TypeError
-  </pre>
-</div>
-
-### Validate the string in context ### {#html-validate-the-string-in-context}
-
-This specification defines the <a>validate the string in context</a> algorithm in [[html#integration-with-idl]].
-
-When <a>validate the string in context</a> is invoked, with |platformObject|, |value|, |stringContext|, and |identifier| run these steps:
-
- 1. If |platformObject|'s [=relevant global object=] has a [=Window/trusted type policy factory=]:
-
-    1. Set |sink| to the result of [=concatenating=] the list &laquo; |platformObject|'s <a spec=webidl>identifier</a>, |identifier| &raquo; with `" "` as |separator|.
-        <div class="example" id="validate-string-example">
-        For example, the following annotation and JavaScript code:
-        <pre highlight=idl>
-        typedef [StringContext=TrustedHTML] DOMString HTMLString;
-        [ Exposed=Window, HTMLConstructor] interface HTMLIFrameElement : HTMLElement {
-            attribute HTMLString srcdoc;
-        };
-        </pre>
-        <pre highlight=js>
-        document.createElement('iframe').srcdoc = foo;
-        document.createElement('iframe').setAttribute('SRCdoc', foo);
-        </pre>
-        causes the |sink| value to be `"HTMLIFrameElement srcdoc"`.
-        </div>
-    1. Set |value| to the result of running the [$Get Trusted Type compliant string$] algorithm, passing the following arguments:
-        * |value| as |input|,
-        * |stringContext| as |expectedType|,
-        * |sink| as |sink|,
-        * `'script'` as |sinkGroup|,
-        * |platformObject|'s [=relevant global object=] as |global|.
-
-        Issue: Remove hardcoding 'script' when new sink groups are specified.
-
-    1. If an exception was thrown, rethrow exception and abort further steps.
- 1. Return |value|.
-
-### Web Workers ###  {#html-workers}
-
-This specification modifies the Worker constuctors and {{importScripts}} function to require {{ScriptURLString}}.
-
-<pre class="idl exclude">
-[Exposed=(Window,Worker)]
-partial interface Worker : EventTarget {
-    constructor(ScriptURLString scriptURL, optional WorkerOptions options = {});
-};
-
-[Exposed=(Window,Worker)]
-partial interface SharedWorker : EventTarget {
-  constructor(ScriptURLString scriptURL, optional (DOMString or WorkerOptions) options = {});
-};
-
-[Exposed=Worker]
-partial interface WorkerGlobalScope : EventTarget {
-  undefined importScripts(ScriptURLString... urls);
-};
-</pre>
-
-## Integration with Service Workers ## {#sw-integration}
-
-This document modifies the IDL for registering service workers, requiring {{ScriptURLString}}:
-
-<pre class="idl exclude">
-[SecureContext, Exposed=(Window,Worker)]
-partial interface ServiceWorkerContainer : EventTarget {
-   [NewObject] Promise&lt;ServiceWorkerRegistration> register(ScriptURLString scriptURL, optional RegistrationOptions options = {});
-};
-</pre>
-
-## Integration with SVG ## {#integration-with-svg}
-
-This document modifies the {{SVGAnimatedString}} interface to enforce Trusted Types:
-
-<pre class="idl exclude">
-[Exposed=Window]
-partial interface mixin SVGAnimatedString {
-           attribute (DOMString or TrustedScriptURL) baseVal;
-};
-</pre>
-
-On setting {{SVGAnimatedString/baseVal}}, the following steps are run:
-
-1. <ins>If the reflected <a spec="dom">attribute</a>'s element is a {{SVGScriptElement}}, set |value| to the result of executing [$Get Trusted Type compliant string$] algorithm, with the following arguments:</ins>
-
-      * <ins>{{TrustedScriptURL}} as |expectedType|,</ins>
-      * <ins>reflected attribute's {{Document}}'s [=relevant global object=] as |global|,</ins>
-      * <ins>specified value as |input|,</ins>
-      * <ins>`SVGScriptElement href` as |sink|,</ins>
-      * <ins>'script' as |sinkGroup|.</ins>
-
-    <ins>Otherwise, set |value| to the specified value.</ins>
-
-1. If the reflected attribute is not present, the {{SVGAnimatedString}} object is defined to additionally reflect a second, deprecated attribute, and that deprecated attribute is present, then set that deprecated attribute to <del>the specified value</del> <ins>|value|</ins>. Otherwise, set the reflected attribute to <ins>|value|</ins> <del>the specified value</del>.
-
-Note: SVG does not have a complete script processing model <a href="https://github.com/w3c/svgwg/issues/196">yet</a>. Trusted Types assumes that the attribute and text body modification protections behave similarly to ones for HTML scripts outlined in [[#enforcement-in-scripts]].
-
-## Integration with DOM Parsing ## {#integration-with-dom-parsing}
-
-This document modifies the following interfaces defined by [[DOM-Parsing]]:
-
-<pre class="idl exclude">
-partial interface Element {
-  [CEReactions, LegacyNullToEmptyString] attribute HTMLString outerHTML;
-  [CEReactions] undefined insertAdjacentHTML(DOMString position, HTMLString text);
-  [CEReactions] undefined setHTMLUnsafe(HTMLString html);
-};
-
-partial interface mixin InnerHTML { // specified in a draft version at https://w3c.github.io/DOM-Parsing/#the-innerhtml-mixin
-  [CEReactions] attribute [LegacyNullToEmptyString] HTMLString innerHTML;
-};
-
-partial interface Range {
-  [CEReactions, NewObject] DocumentFragment createContextualFragment(HTMLString fragment);
-};
-
-partial interface ShadowRoot {
-  [CEReactions] undefined setHTMLUnsafe(HTMLString html);
-};
-
-[Exposed=Window]
-interface DOMParser {
-  constructor();
-  [NewObject] Document parseFromString(HTMLString str, SupportedType type);
-};
-
-partial interface Document {
-  static Document parseHTMLUnsafe(HTMLString html);
-};
-</pre>
-
-## Integration with execCommand ## {#integration-with-exec-command}
-
-This document modifies the following interfaces defined by the unofficial <a href="https://w3c.github.io/editing/docs/execCommand/">execCommand</a> document:
-
-<pre class="idl exclude">
-partial interface Document {
-    [CEReactions, RaisesException] boolean execCommand(DOMString commandId, optional boolean showUI = false, optional (DOMString or TrustedHTML) value = "");
-};
-</pre>
-
-The implementation of the <a href="https://w3c.github.io/editing/docs/execCommand/#the-inserthtml-command">insertHTML</a> execCommand passes the unmodified value from its third argument
-instance to the  {{Range/createContextualFragment()}} algorithm.
+Note: See [https://github.com/whatwg/dom/pull/1258](https://github.com/whatwg/dom/pull/1258) and [https://github.com/whatwg/dom/pull/1268](https://github.com/whatwg/dom/pull/1268) which upstream this integration.
 
 ## Integration with Content Security Policy ## {#integration-with-content-security-policy}
 
@@ -1560,7 +1322,7 @@ if a navigation violates the [=require-trusted-types-for-directive|require-trust
 otherwise. This constitutes the [=require-trusted-types-for-directive|require-trusted-types-for=] directive's [=pre-navigation check=]:
 
 Note: This algorithm assures that the code to be executed by a navigation to a `javascript:` URL will have to pass through a
-<a>default policy</a>'s `createScript` function, in addition to all other restrictions imposed by other CSP directives.
+[=default-policy-explanation|default policy=]'s `createScript` function, in addition to all other restrictions imposed by other CSP directives.
 
 1. If |request|'s [=request/url=]'s [=url/scheme=] is not `"javascript"`, return `"Allowed"` and abort further steps.
 1. Let |urlString| be the result of running the [=URL serializer=] on |request|'s [=request/url=].
@@ -1616,6 +1378,13 @@ Content-Security-Policy: trusted-types; require-trusted-types-for 'script'
 </pre>
 </div>
 
+The keyword `'none'` may be used to explicitly express the above:
+<div class="example" id="header-with-none-that-allows-no-policy-names">
+<pre class="http">
+Content-Security-Policy: trusted-types 'none'; require-trusted-types-for 'script'
+</pre>
+</div>
+
 Keyword `'allow-duplicates'` allows for creating policies with a name that was already used.
 
 <div class="example" id="allow-duplicates-in-header">
@@ -1624,9 +1393,8 @@ Content-Security-Policy: trusted-types foo bar 'allow-duplicates'
 </pre>
 </div>
 
-If the policy named `default` is present in the list, it refers to the
-[=default policy=]. All strings passed to [=injection sinks=] will be passed through it instead
-of being rejected outright.
+If the policy named `default` is present in the list, it refers to the [=TrustedTypePolicyFactory/default policy=].
+All strings passed to [=injection sinks=] will be passed through it instead of being rejected outright.
 
 <div class="example" id="default-in-header">
 <pre class="http">
@@ -1634,6 +1402,22 @@ Content-Security-Policy: trusted-types one two default
 </pre>
 </div>
 
+### <dfn abstract-op>Does sink type require trusted types?</dfn> ### {#does-sink-require-trusted-types}
+
+Given a [=realm/global object=] (|global|), a string (|sinkGroup|) this algorithm
+returns `true` if the [=injection sink=] requires a [=Trusted Type=], and
+`false` otherwise.
+
+1.  Let |result| be `false`.
+1.  For each |policy| in |global|'s <a>CSP list</a>:
+    1.  If |policy|'s <a>directive set</a> does not contain a <a>directive</a>
+        whose [=directive/name=] is `"require-trusted-types-for"`, skip to the next |policy|.
+    1.  Let |directive| be the |policy|'s |directive set|'s [=directive=] whose name
+        is `"require-trusted-types-for"`
+    1.  If |directive|'s [=directive/value=] does not contain a <a>trusted-types-sink-group</a> which is a match
+        for |sinkGroup|, skip to the next |policy|.
+    1.  Set |result| to `true`.
+1. Return |result|.
 
 ### <dfn abstract-op>Should sink type mismatch violation be blocked by Content Security Policy?</dfn> ### {#should-block-sink-type-mismatch}
 
@@ -1644,11 +1428,11 @@ returns `"Blocked"` if the [=injection sink=] requires a [=Trusted Type=], and
 1.  Let |result| be `"Allowed"`.
 1.  For each |policy| in |global|'s <a>CSP list</a>:
     1.  If |policy|'s <a>directive set</a> does not contain a <a>directive</a>
-        which [=directive/name=] is `"require-trusted-types-for"`, skip to the next |policy|.
-    1.  Let |directive| be the |policy|'s |directive set|'s [=directive=] which name
+        whose [=directive/name=] is `"require-trusted-types-for"`, skip to the next |policy|.
+    1.  Let |directive| be the |policy|'s |directive set|'s [=directive=] whose name
         is `"require-trusted-types-for"`
     1.  If |directive|'s [=directive/value=] does not contain a <a>trusted-types-sink-group</a> which is a match
-        for a value |sinkGroup|, skip to the next |policy|.
+        for |sinkGroup|, skip to the next |policy|.
     1.  Let |violation| be the result of executing
         [[CSP#create-violation-for-global|Create a violation object for global, policy, and directive]]
         on |global|, |policy| and `"require-trusted-types-for"`
@@ -1699,93 +1483,9 @@ strings (|createdPolicyNames|), this algorithm returns `"Blocked"` if the
         `"Blocked"`.
 1. Return |result|.
 
-### Violation object changes ### {#csp-violation-object-hdr}
-
-[=violation|Violation=] object [=violation/resource=] also allows `"trusted-types-policy"`
-and `"trusted-types-sink"` as values.
-
 ### Support for dynamic code compilation ### {#csp-eval}
 
-This document modifies the [[CSP3#can-compile-strings|EnsureCSPDoesNotBlockStringCompilation]]
-which is reproduced in its entirety below with additions and deletions.
-
-Note: This is based on [dynamic-code-brand-checks](https://tc39.es/proposal-dynamic-code-brand-checks/) and
-assumes additional arguments are passed to this algorithm from ECMAScript.
-See also <a href="https://github.com/tc39/ecma262/issues/938">TC39/ecma262 issue #938</a>.
-
-<div class="note">Note: EcmaScript code may call `Function()` and `eval` cross realm.
-<pre highlight="js">
-  let f = new self.top.Function(source);
-</pre>
-In this case, the <var ignore="">callerRealm</var>'s Window is `self` and the |calleeRealm|'s Window is `self.top`.
-The Trusted Types portion of this algorithm uses |calleeRealm| and its CSP setting for consistency with other sinks.
-<pre highlight="js">
-  // Assigning a string to another Realm's DOM sink uses that Realm's default policy.
-  self.top.body.innerHTML = 'Hello, World!';
-  // Using another Realm's builtin Function constructor should analogously use that
-  // Realm's default policy.
-  new self.top.Function('alert(1)')()
-</pre>
-</div>
-
-Given a [[ECMA-262#realm|realm]] (|calleeRealm|), a string
-(|source|) <ins>, a boolean |wasCodeLike| and a string |compilationSink|</ins>, this algorithm returns <del>normally</del><ins>the
-source string to compile</ins> if compilation is allowed, and
-throws an "`EvalError`" if not:
-
-1.  <ins>If |wasCodeLike| is true, let |sourceToValidate| be a new instance of
-    the {{TrustedScript}} interface, with its `[[Data]]` internal slot value
-    set to |source|. Otherwise, let |sourceToValidate| be |source|.</ins>
-
-1. <ins>Let |sourceString| be the result of executing the
-    [$Get Trusted Type compliant string$] algorithm, with:
-    *   |calleeRealm| as |global|,
-    *   |sourceToValidate| as |input|,
-    *   |compilationSink| as |sink|,
-    *   `'script'` as |sinkGroup|,
-    *   {{TrustedScript}} as |expectedType|.</ins>
-
-2.  <ins>If the algorithm throws an error, throw an {{EvalError}}.</ins>
-
-3.  Let |global| be a |calleeRealm|'s [=realm/global object=].
-
-4.  Let |result| be "`Allowed`".
-
-5.  For each |policy| in |global|'s <a for="global object" spec="CSP3">CSP list</a>:
-
-    1.  Let |source-list| be `null`.
-
-    2.  If |policy| contains a [=directive=] whose [=directive/name=] is "`script-src`", then
-        set |source-list| to that [=directive=]'s [=directive/value=].
-
-        Otherwise if |policy| contains a [=directive=] whose [=directive/name=] is
-        "`default-src`", then set |source-list| to that directive's [=directive/value=].
-
-    3.  If |source-list| is not `null`, and does not contain a [=source expression=] which is
-        an [=ASCII case-insensitive=] match for the string "<a grammar>`'unsafe-eval'`</a>" then:
-
-        1.  Let |violation| be the result of executing [[CSP3#create-violation-for-global]] on
-            |global|, |policy|, and "`script-src`".
-
-        2.  Set |violation|'s [=violation/resource=] to "`inline`".
-
-        3.  If |source-list| [=list/contains=] the expression
-            "<a grammar>`'report-sample'`</a>", then set |violation|'s [=violation/sample=] to
-            the substring of <del>|source|</del> <ins>|sourceString|</ins> containing its first
-            40 characters.
-
-        4.  Execute [[CSP3#report-violation]] on |violation|.
-
-        5.  If |policy|'s [=policy/disposition=] is "`enforce`", then set |result| to
-            "`Blocked`".
-
-6.  If |result| is "`Blocked`", throw an `EvalError` exception.
-
-7. <ins>Return |sourceString|.</ins>
-
-Note: returning |sourceString| means that the string that gets
-compiled is that returned by any [=default policy=] in the course of
-executing [$Get Trusted Type compliant string$].
+Note: See [https://github.com/w3c/webappsec-csp/pull/659](https://github.com/w3c/webappsec-csp/pull/659) which upstreams this integration.
 
 # Security Considerations # {#security-considerations}
 
@@ -1823,21 +1523,6 @@ restrictions:
 
 * <a href="https://w3c.github.io/webcomponents/spec/imports/">HTML imports</a>
 
-## Plugin navigation ## {#plugins}
-
-Plugin content may have access to the document that embeds it (or; more broadly,
-to the origin it was served from), often giving it the same capabilities
-as DOM XSS. That's why Trusted Types limit {{HTMLEmbedElement}}'s <{embed/src}> to
-{{TrustedScriptURL}}.
-
-However, it is also possible to navigate an existing object / embed to an
-arbitrary location, bypassing the {{TrustedScriptURL}} restriction.
-
-Since plugin content in the web in general is being phased out for other
-security reasons, and their navigation model is in flux, we recommend authors
-to prevent that bypass vector by limiting the plugins altogether with
-[=object-src=]. For example: `Content-Security-Policy: object-src: none`.
-
 ## Script gadgets ## {#script-gadgets}
 
 While Trusted Types logic is called on many operations that results in creating
@@ -1872,7 +1557,7 @@ Issue: Refer to the external document on secure policy design.
 
 The specification may partially observe and alter the behavior of scripts running
 within the application, e.g. causing certain operations on [=injection sinks=]
-to fail, or monitoring and changing their effect with a [=default policy=].
+to fail, or monitoring and changing their effect with a [=TrustedTypePolicyFactory/default policy=].
 However, early-running scripts already have this capability by overriding
 appropriate property descriptors.
 
@@ -1890,5 +1575,5 @@ NOT interfere with the operation of user-agent features like addons,
 extensions, or bookmarklets. These kinds of features generally advance
 the user’s priority over page authors, as espoused in
 [[html-design-principles]]. Specifically, extensions SHOULD be able to pass strings
-to the [=injection sinks=] without triggering [=default policy=]
+to the [=injection sinks=] without triggering [=TrustedTypePolicyFactory/default policy=]
 execution, violation generation, or the rejection of the value.
